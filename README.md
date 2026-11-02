@@ -6,7 +6,7 @@ Obsidian Canvas — right inside NotePlan.
 ## Installation
 
 Canvas View is a [community plugin](https://github.com/NotePlan/plugins/blob/main/community-plugins.json).
-Download `plugin.json`, `script.js`, `canvasClient.js` and `showdown.min.js` from the
+Download `plugin.json`, `script.js`, `canvasCore.js`, `canvasClient.js`, `canvasView.css` and `showdown.min.js` from the
 [latest release](https://github.com/lifeplayer67/noteplan-canvas-view/releases) and put them
 into a `lifeplayer67.CanvasView` folder inside your NotePlan `Plugins` directory.
 
