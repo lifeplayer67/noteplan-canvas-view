@@ -1,4 +1,5 @@
-/* eslint-disable */
+/* eslint-disable no-var, prefer-template -- plain ES5 browser file, no build step */
+/* global sendMessageToPlugin */
 // -----------------------------------------------------------------------------
 // Canvas View — client engine. Runs inside the NotePlan HTML window.
 // Owns the canvas state, renders nodes/edges, handles all interactions and
@@ -64,6 +65,9 @@
   var zoomLabel = document.getElementById('zoom-level')
   var svg = null
   var scale = 1, tx = 0, ty = 0
+
+  // groups activate only by their frame: hit margin in screen pixels
+  var GROUP_FRAME_PX = 14
 
   var selectedNodes = new Set()
   var selectedEdges = new Set()
@@ -145,9 +149,13 @@
       else body = '<div class="content file-missing">No such note in NotePlan yet.<br>Double-click to write it (the note gets created).<br>Double-click the header to pick another.</div>'
       inner = '<div class="file-head"><span>📄</span> <span class="fh-name">' + escapeHtml(base) + '</span><span class="open-btn" title="Open the note in NotePlan (or ⌘+click the card)">↗</span></div>' + body
     } else if (n.type === 'link') {
+      // SECURITY: only http(s) reaches the DOM — both the iframe AND the anchor
+      // (a javascript: url in a malicious .canvas must never become clickable)
       var url = String(n.url || '')
-      var frame = /^https?:\/\//.test(url) ? '<iframe class="web-frame" src="' + escapeHtml(url) + '" sandbox></iframe>' : ''
-      inner = '<div class="file-head"><span>🔗</span> <span class="fh-name">' + escapeHtml(url) + '</span><a class="open-btn ext-open" href="' + escapeHtml(url) + '" target="_blank" title="Open in browser">↗</a></div>' + frame
+      var isHttp = /^https?:\/\//i.test(url)
+      var frame = isHttp ? '<iframe class="web-frame" src="' + escapeHtml(url) + '" sandbox></iframe>' : ''
+      var openBtn = isHttp ? '<a class="open-btn ext-open" href="' + escapeHtml(url) + '" target="_blank" title="Open in browser">↗</a>' : ''
+      inner = '<div class="file-head"><span>🔗</span> <span class="fh-name">' + escapeHtml(url) + '</span>' + openBtn + '</div>' + frame
     }
     return '<div class="node ' + n.type + sel + '" data-id="' + escapeHtml(n.id) + '"' + extra + ' style="' + style + '">' + inner + anchors + '</div>'
   }
@@ -537,18 +545,6 @@
     })
   }
 
-  /** Edit the underlying value of a file node ('file' path) or link node ('url') */
-  function editCardValue(el, prop) {
-    var n = nodeById[el.dataset.id]
-    prompt2(el, n[prop] || '', function (v) {
-      if (v === (n[prop] || '')) return
-      pushUndo()
-      n[prop] = v
-      renderScene()
-      persist()
-    }, true)
-  }
-
   /**
    * Link cards edit in a multiline textarea (Enter = newline, like text cards).
    * If the committed value is a bare URL the node stays a 'link'; anything richer
@@ -661,9 +657,9 @@
     })
   }
 
-  function prompt2(anchorEl, initial, onCommit, inset) {
+  function prompt2(anchorEl, initial, onCommit) {
     var input = document.createElement('input')
-    input.className = inset ? 'card-input' : 'label-input'
+    input.className = 'label-input'
     input.value = initial
     anchorEl.appendChild(input)
     setTimeout(function () { input.focus() }, 0)
@@ -852,7 +848,7 @@
         // background — a new text card appears right there, inside the group
         var gdp = toWorld(e.clientX, e.clientY)
         var gdn = nodeById[gEl.dataset.id]
-        if (e.target.closest('.group-label') || (gdn && isGroupBorderHit(gdn, gdp.x, gdp.y, 14 / scale))) editGroupLabel(gEl)
+        if (e.target.closest('.group-label') || (gdn && isGroupBorderHit(gdn, gdp.x, gdp.y, GROUP_FRAME_PX / scale))) editGroupLabel(gEl)
         else createTextNode(gdp.x, gdp.y)
         return
       }
@@ -888,7 +884,7 @@
     if (nodeEl && nodeEl.classList.contains('group') && !e.target.closest('.group-label') && !selectedNodes.has(nodeEl.dataset.id)) {
       var gp = toWorld(e.clientX, e.clientY)
       var gn = nodeById[nodeEl.dataset.id]
-      if (gn && !isGroupBorderHit(gn, gp.x, gp.y, 14 / scale)) {
+      if (gn && !isGroupBorderHit(gn, gp.x, gp.y, GROUP_FRAME_PX / scale)) {
         nodeEl = null
         interiorGroupClick = true
       }
@@ -1134,7 +1130,7 @@
     }
   }
 
-  console.log('canvasClient v1.0.1 booted: ' + canvas.nodes.length + ' nodes, ' + canvas.edges.length + ' edges')
+  console.log('canvasClient v1.0.2 booted: ' + canvas.nodes.length + ' nodes, ' + canvas.edges.length + ' edges')
   renderScene()
   fit()
 })()

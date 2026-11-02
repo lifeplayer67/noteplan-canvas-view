@@ -5,8 +5,8 @@ var exports = function(exports) {
     "macOS.minVersion": "10.13.0",
     "plugin.id": "lifeplayer67.CanvasView",
     "plugin.name": "Canvas View",
-    "plugin.version": "1.0.1",
-    "plugin.lastUpdateInfo": "Code split for maintainability: pure helpers in canvasCore.js, styles in canvasView.css. No behaviour changes.",
+    "plugin.version": "1.0.2",
+    "plugin.lastUpdateInfo": "QA pass: javascript: urls in link cards are inert, geometry clamped both ways, cleaner logs; dead-code cleanup and shared path constants.",
     "plugin.description": "Edit Obsidian Canvas / JSON Canvas (.canvas) files inside NotePlan: create and connect cards, move, resize, color, label edges, undo/redo — fully compatible with Obsidian.",
     "plugin.icon": "fa-diagram-project",
     "plugin.iconColor": "orange-500",
@@ -38319,10 +38319,12 @@ var exports = function(exports) {
   }
   const PLUGIN_ID = pluginJson$1["plugin.id"];
   const openedCanvasPaths = new Set;
+  const APP_ROOT = "../../../";
+  const NOTES_ROOT = `${APP_ROOT}Notes/`;
   function isSafeCanvasPath(p) {
-    if (!p.startsWith("../../../Notes/")) return false;
+    if (!p.startsWith(NOTES_ROOT)) return false;
     if (!p.toLowerCase().endsWith(".canvas")) return false;
-    return !p.slice("../../../".length).includes("..");
+    return !p.slice(APP_ROOT.length).includes("..");
   }
   function windowIdFor(fullPath) {
     return `${PLUGIN_ID}.${fullPath.split("/").pop() ?? "main"}`;
@@ -38345,8 +38347,8 @@ var exports = function(exports) {
     svg: "image/svg+xml"
   };
   function loadImageDataURI(filePath) {
-    const candidates = [ `../../../Notes/${filePath}` ];
-    if (filePath.startsWith("Notes/")) candidates.push(`../../../${filePath}`);
+    const candidates = [ `${NOTES_ROOT}${filePath}` ];
+    if (filePath.startsWith("Notes/")) candidates.push(`${APP_ROOT}${filePath}`);
     for (const p of candidates) {
       const b64 = DataStore.loadData(p, false);
       if (b64 != null && b64 !== "" && b64.length < 35e5) {
@@ -38361,7 +38363,7 @@ var exports = function(exports) {
     const withExt = /\.canvas$/i.test(trimmed) ? trimmed : `${trimmed}.canvas`;
     if (withExt.startsWith("/")) return `${"../".repeat(12)}${withExt.slice(1)}`;
     const folder = canvasFolder.replace(/^\/+|\/+$/g, "");
-    return folder === "" ? `../../../Notes/${withExt}` : `../../../Notes/${folder}/${withExt}`;
+    return folder === "" ? `${NOTES_ROOT}${withExt}` : `${NOTES_ROOT}${folder}/${withExt}`;
   }
   function loadCanvas(fullPath) {
     const raw = DataStore.loadData(fullPath, true);
@@ -38371,10 +38373,24 @@ var exports = function(exports) {
     } catch (parseError) {
       const cleaned = raw.replace(/([[{,]\s*)…\s*/g, "$1").replace(/[\u2028\u2029\u00A0\u200B\uFEFF]/g, " ");
       const parsed = JSON.parse(cleaned);
-      logError(pluginJson$1, `loadCanvas: auto-repaired invalid JSON in '${fullPath}' (was: ${parseError.message})`);
+      logWarn(pluginJson$1, `loadCanvas: auto-repaired invalid JSON in '${fullPath}' (was: ${parseError.message})`);
       DataStore.saveData(cleaned, fullPath, true);
       return parsed;
     }
+  }
+  function findNoteByTitle(title) {
+    const matches = DataStore.projectNoteByTitle(title) ?? [];
+    return matches.length > 0 ? matches[0] : null;
+  }
+  async function noteContentPayload(id, title) {
+    const note = findNoteByTitle(title);
+    return {
+      id: id,
+      found: note != null,
+      title: title,
+      content: note?.content ?? "",
+      html: note != null ? await noteContentHTML(note.content ?? "", note) : ""
+    };
   }
   async function noteContentHTML(content, note) {
     const html = await getNoteContentAsHTML(content, note);
@@ -38392,7 +38408,7 @@ var exports = function(exports) {
           const options = canvasNotes.map((n => n.filename));
           const res = await CommandBar.showOptions(options, "Open which canvas?");
           if (res == null) return;
-          fullPath = `../../../Notes/${options[res.index]}`;
+          fullPath = `${NOTES_ROOT}${options[res.index]}`;
         } else {
           const answer = await CommandBar.textPrompt("Canvas View", settings.canvasFolder !== "" ? `Path to .canvas file (relative to Notes/${settings.canvasFolder})` : "Path to .canvas file (relative to your Notes folder)", "");
           if (answer === false || answer == null || String(answer).trim() === "") return;
@@ -38418,7 +38434,7 @@ var exports = function(exports) {
       const withExt = /\.canvas$/i.test(name) ? name : `${name}.canvas`;
       const defaultFolder = settings.canvasFolder !== "" ? settings.canvasFolder.replace(/^\/+|\/+$/g, "") : "Canvases";
       const relPath = withExt.includes("/") ? withExt : `${defaultFolder}/${withExt}`;
-      const fullPath = `../../../Notes/${relPath}`;
+      const fullPath = `${NOTES_ROOT}${relPath}`;
       const existing = DataStore.loadData(fullPath, true);
       if (existing == null || existing === "") {
         const ok = DataStore.saveData(JSON.stringify({
@@ -38472,12 +38488,12 @@ var exports = function(exports) {
           continue;
         }
         const noteTitle = (filePath.split("/").pop() ?? "").replace(/\.[^.]+$/, "");
-        const matches = DataStore.projectNoteByTitle(noteTitle) ?? [];
-        fileContents[node.id] = matches.length > 0 ? {
+        const note = findNoteByTitle(noteTitle);
+        fileContents[node.id] = note != null ? {
           found: true,
           title: noteTitle,
-          content: matches[0].content ?? "",
-          html: await noteContentHTML(matches[0].content ?? "", matches[0])
+          content: note.content ?? "",
+          html: await noteContentHTML(note.content ?? "", note)
         } : {
           found: false,
           title: noteTitle
@@ -38538,9 +38554,9 @@ var exports = function(exports) {
         {
           const noteTitle = String(payload.title ?? "");
           const content = String(payload.content);
-          const matches = DataStore.projectNoteByTitle(noteTitle) ?? [];
-          if (matches.length > 0) {
-            matches[0].content = content;
+          const note = findNoteByTitle(noteTitle);
+          if (note != null) {
+            note.content = content;
             logDebug(pluginJson$1, `saveNote: updated '${noteTitle}' (${content.length} chars)`);
           } else {
             const withTitle = content.startsWith("# ") ? content : `# ${noteTitle}\n${content}`;
@@ -38552,15 +38568,7 @@ var exports = function(exports) {
 
        case "getNoteContent":
         {
-          const noteTitle = String(payload.title ?? "");
-          const matches = DataStore.projectNoteByTitle(noteTitle) ?? [];
-          await sendToHTMLWindow(windowIdFor(String(payload.path ?? "")), "NOTE_CONTENT", {
-            id: payload.id,
-            found: matches.length > 0,
-            title: noteTitle,
-            content: matches.length > 0 ? matches[0].content ?? "" : "",
-            html: matches.length > 0 ? await noteContentHTML(matches[0].content ?? "", matches[0]) : ""
-          });
+          await sendToHTMLWindow(windowIdFor(String(payload.path ?? "")), "NOTE_CONTENT", await noteContentPayload(payload.id, String(payload.title ?? "")));
           break;
         }
 
@@ -38582,14 +38590,7 @@ var exports = function(exports) {
         {
           const windowId = windowIdFor(String(payload.path ?? ""));
           for (const item of payload.items ?? []) {
-            const matches = DataStore.projectNoteByTitle(String(item.title)) ?? [];
-            await sendToHTMLWindow(windowId, "NOTE_CONTENT", {
-              id: item.id,
-              found: matches.length > 0,
-              title: String(item.title),
-              content: matches.length > 0 ? matches[0].content ?? "" : "",
-              html: matches.length > 0 ? await noteContentHTML(matches[0].content ?? "", matches[0]) : ""
-            });
+            await sendToHTMLWindow(windowId, "NOTE_CONTENT", await noteContentPayload(item.id, String(item.title)));
           }
           break;
         }
