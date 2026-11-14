@@ -23,6 +23,7 @@
   var nodeInsideGroup = core.nodeInsideGroup
   var isGroupBorderHit = core.isGroupBorderHit
   var filterNotes = core.filterNotes
+  var VALID_NODE_TYPES = core.VALID_NODE_TYPES
   var sanitizeCanvas = core.sanitizeCanvas
 
   // jsdom interaction tests set this flag before require() to run the full boot
@@ -125,20 +126,28 @@
   // ---------- rendering ----------
 
   function nodeHTML(n) {
-    var color = resolveColor(n.color, n.type === 'group' ? '#8a8a8a' : '#9aa0a6')
+    // SECURITY: only whitelisted types reach the class attribute; anything else
+    // renders as an inert 'unsupported' card (the node's DATA stays untouched,
+    // so canvases with extended node types from other tools round-trip safely)
+    var safeType = VALID_NODE_TYPES.indexOf(n.type) >= 0 ? n.type : 'unsupported'
+    var color = resolveColor(n.color, safeType === 'group' ? '#8a8a8a' : '#9aa0a6')
     var sel = selectedNodes.has(n.id) ? ' selected' : ''
     var style = 'left:' + n.x + 'px;top:' + n.y + 'px;width:' + n.width + 'px;height:' + n.height + 'px;border-color:' + color + ';'
     var anchors =
       '<div class="anchor" data-side="top"></div><div class="anchor" data-side="right"></div>' +
       '<div class="anchor" data-side="bottom"></div><div class="anchor" data-side="left"></div>'
     var inner = ''
-    if (n.type === 'group') {
+    if (safeType === 'unsupported') {
+      inner = '<div class="content">Unsupported node type: <code>' + escapeHtml(String(n.type)) + '</code></div>'
+      return '<div class="node unsupported' + sel + '" data-id="' + escapeHtml(n.id) + '" style="' + style + '">' + inner + anchors + '</div>'
+    }
+    if (safeType === 'group') {
       var label = '<div class="group-label" style="color:' + color + '">' + escapeHtml(n.label || '') + '</div>'
       return '<div class="node group' + sel + '" data-id="' + escapeHtml(n.id) + '" style="' + style + 'background:' + hexAlpha(color, 0.06) + '">' + label + anchors + '</div>'
     }
     var extra = ''
-    if (n.type === 'text') inner = '<div class="content">' + renderMarkdown(n.text || '') + '</div>'
-    else if (n.type === 'file') {
+    if (safeType === 'text') inner = '<div class="content">' + renderMarkdown(n.text || '') + '</div>'
+    else if (safeType === 'file') {
       var base = String(n.file || '').split('/').pop()
       var title = base.replace(/\.[^.]+$/, '')
       extra = ' data-note-title="' + escapeHtml(title) + '"'
@@ -148,7 +157,7 @@
       else if (fc && fc.found) body = '<div class="content file-content">' + (fc.html || renderMarkdown(fc.content || '')) + '</div>'
       else body = '<div class="content file-missing">No such note in NotePlan yet.<br>Double-click to write it (the note gets created).<br>Double-click the header to pick another.</div>'
       inner = '<div class="file-head"><span>📄</span> <span class="fh-name">' + escapeHtml(base) + '</span><span class="open-btn" title="Open the note in NotePlan (or ⌘+click the card)">↗</span></div>' + body
-    } else if (n.type === 'link') {
+    } else if (safeType === 'link') {
       // SECURITY: only http(s) reaches the DOM — both the iframe AND the anchor
       // (a javascript: url in a malicious .canvas must never become clickable)
       var url = String(n.url || '')
@@ -157,7 +166,7 @@
       var openBtn = isHttp ? '<a class="open-btn ext-open" href="' + escapeHtml(url) + '" target="_blank" title="Open in browser">↗</a>' : ''
       inner = '<div class="file-head"><span>🔗</span> <span class="fh-name">' + escapeHtml(url) + '</span>' + openBtn + '</div>' + frame
     }
-    return '<div class="node ' + n.type + sel + '" data-id="' + escapeHtml(n.id) + '"' + extra + ' style="' + style + '">' + inner + anchors + '</div>'
+    return '<div class="node ' + safeType + sel + '" data-id="' + escapeHtml(n.id) + '"' + extra + ' style="' + style + '">' + inner + anchors + '</div>'
   }
 
   function hexAlpha(hex, a) {
@@ -1130,7 +1139,7 @@
     }
   }
 
-  console.log('canvasClient v1.0.2 booted: ' + canvas.nodes.length + ' nodes, ' + canvas.edges.length + ' edges')
+  console.log('canvasClient v1.0.3 booted: ' + canvas.nodes.length + ' nodes, ' + canvas.edges.length + ' edges')
   renderScene()
   fit()
 })()

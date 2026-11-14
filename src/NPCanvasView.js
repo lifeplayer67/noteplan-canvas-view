@@ -117,10 +117,21 @@ async function noteContentPayload(id: any, title: string): Promise<Object> {
   }
 }
 
-/** Note HTML via the shared converter, remapped to the theme's 'p b' / 'p emph' selectors */
+/**
+ * Note HTML via the shared converter, remapped to the theme's 'p b' / 'p emph'
+ * selectors, with link hrefs restricted to http(s)/mailto/#/relative — the same
+ * rule canvasCore.sanitizeHrefs applies on the window side (kept in sync by hand:
+ * plain-JS core can't be imported here without its showdown side effect).
+ */
 async function noteContentHTML(content: string, note: TNote): Promise<string> {
   const html = await getNoteContentAsHTML(content, note)
-  return html.replace(/<(\/?)strong>/g, '<$1b>').replace(/<(\/?)em>/g, '<$1emph>')
+  return html
+    .replace(/<(\/?)strong>/g, '<$1b>')
+    .replace(/<(\/?)em>/g, '<$1emph>')
+    .replace(/(<a\s[^>]*href=")([^"]*)"/gi, (m, pre, href) => {
+      const ok = /^(https?:|mailto:|#)/i.test(href) || !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href)
+      return ok ? m : `${pre}#"`
+    })
 }
 
 // HTML pieces for the two-way comms bridge (np.Shared must be installed).

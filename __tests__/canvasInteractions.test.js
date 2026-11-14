@@ -20,6 +20,8 @@ const FIXTURE = {
 
 // malicious link card: must render with NO clickable anchor and NO iframe
 FIXTURE.nodes.push({ id: 'evil', type: 'link', url: 'javascript:alert(1)', x: 800, y: 0, width: 200, height: 100 })
+// malicious node type: must never reach the class attribute raw, data must survive
+FIXTURE.nodes.push({ id: 'eviltype', type: 'x"><img src=x onerror=alert(1)>', x: 800, y: 200, width: 200, height: 100 })
 
 let api
 
@@ -206,6 +208,17 @@ describe('groups', () => {
 })
 
 describe('security', () => {
+  test('a malicious node type renders as an inert unsupported card, data intact', () => {
+    expect(document.querySelector('img[onerror]')).toBeNull()
+    const el = document.querySelector('.node[data-id="eviltype"]')
+    expect(el).not.toBeNull()
+    expect(el.className).toContain('unsupported')
+    expect(el.className).not.toContain('onerror')
+    // round-trip: the node and its original type are still in the data
+    const node = api.getCanvas().nodes.find((n) => n.id === 'eviltype')
+    expect(node.type).toContain('onerror')
+  })
+
   test('a javascript: url in a link card gets no anchor and no iframe', () => {
     const el = document.querySelector('.node[data-id="evil"]')
     expect(el).not.toBeNull()

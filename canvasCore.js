@@ -12,6 +12,10 @@
 
   var PRESET_COLORS = { 1: '#e93147', 2: '#ec7500', 3: '#e0ac00', 4: '#08b94e', 5: '#00bfbc', 6: '#7852ee' }
 
+  // SECURITY: the node type lands in a class attribute — only these render as-is;
+  // anything else is shown as an inert 'unsupported' card (data kept intact)
+  var VALID_NODE_TYPES = ['text', 'file', 'link', 'group']
+
   function resolveColor(c, fallback) {
     // SECURITY: colors land inside style/SVG attributes — only presets or #hex pass
     if (!c) return fallback || '#8a8a8a'
@@ -29,6 +33,7 @@
       return Math.min(hi, Math.max(lo, v))
     }
     ;(c.nodes || []).forEach(function (n) {
+      if (typeof n.type !== 'string') n.type = ''
       n.x = clamp(num(n.x, 0), -1e7, 1e7)
       n.y = clamp(num(n.y, 0), -1e7, 1e7)
       n.width = clamp(num(n.width, 250), 10, 100000)
@@ -66,6 +71,14 @@
     return mdConverter
   }
 
+  /** Allow only http(s), mailto:, '#' and relative hrefs; everything else -> '#' */
+  function sanitizeHrefs(html) {
+    return html.replace(/(<a\s[^>]*href=")([^"]*)"/gi, function (m, pre, href) {
+      var ok = /^(https?:|mailto:|#)/i.test(href) || !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href)
+      return ok ? m : pre + '#"'
+    })
+  }
+
   function renderMarkdown(md, assetBase) {
     // block raw HTML injection, keep markdown punctuation intact
     var safe = String(md).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -79,6 +92,9 @@
       var title = String(target).split('/').pop().replace(/\.md$/, '')
       return '<a href="#" class="note-link" data-note-title="' + escapeHtml(title) + '">' + (alias || title) + '</a>'
     })
+    // SECURITY: showdown does not filter link URLs — keep only http(s), mailto:,
+    // '#' and relative targets; anything else (javascript: etc.) becomes inert '#'
+    html = sanitizeHrefs(html)
     // external links open outside; relative image srcs resolve against the Notes folder
     html = html.replace(/<a href="http/g, '<a target="_blank" href="http')
     html = html.replace(/<img src="(?!https?:|data:)([^"]+)"/g, function (_, src) {
@@ -150,6 +166,8 @@
   }
 
   var pure = {
+    VALID_NODE_TYPES: VALID_NODE_TYPES,
+    sanitizeHrefs: sanitizeHrefs,
     resolveColor: resolveColor,
     anchorPoint: anchorPoint,
     sideNormal: sideNormal,

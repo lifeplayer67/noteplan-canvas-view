@@ -5,8 +5,8 @@ var exports = function(exports) {
     "macOS.minVersion": "10.13.0",
     "plugin.id": "lifeplayer67.CanvasView",
     "plugin.name": "Canvas View",
-    "plugin.version": "1.0.2",
-    "plugin.lastUpdateInfo": "QA pass: javascript: urls in link cards are inert, geometry clamped both ways, cleaner logs; dead-code cleanup and shared path constants.",
+    "plugin.version": "1.0.3",
+    "plugin.lastUpdateInfo": "Security: node types are whitelisted before rendering (unknown types show as inert cards, data preserved); markdown link hrefs restricted to http(s)/mailto/#/relative.",
     "plugin.description": "Edit Obsidian Canvas / JSON Canvas (.canvas) files inside NotePlan: create and connect cards, move, resize, color, label edges, undo/redo — fully compatible with Obsidian.",
     "plugin.icon": "fa-diagram-project",
     "plugin.iconColor": "orange-500",
@@ -38394,7 +38394,10 @@ var exports = function(exports) {
   }
   async function noteContentHTML(content, note) {
     const html = await getNoteContentAsHTML(content, note);
-    return html.replace(/<(\/?)strong>/g, "<$1b>").replace(/<(\/?)em>/g, "<$1emph>");
+    return html.replace(/<(\/?)strong>/g, "<$1b>").replace(/<(\/?)em>/g, "<$1emph>").replace(/(<a\s[^>]*href=")([^"]*)"/gi, ((m, pre, href) => {
+      const ok = /^(https?:|mailto:|#)/i.test(href) || !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href);
+      return ok ? m : `${pre}#"`;
+    }));
   }
   const COMMS_BRIDGE_HTML = `\n<script>\nconst receivingPluginID = "${PLUGIN_ID}"\nfunction onMessageFromPlugin(type, data) {\n  if (window.__onPluginMessage) window.__onPluginMessage(type, data)\n}\n<\/script>\n<script type="text/javascript" src="../np.Shared/pluginToHTMLErrorBridge.js"><\/script>\n<script type="text/javascript" src="../np.Shared/pluginToHTMLCommsBridge.js"><\/script>\n`;
   async function openCanvas(pathArg) {

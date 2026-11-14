@@ -1,5 +1,15 @@
 # Canvas View Changelog
 
+## [1.0.3] - 2026-11-14 (unreleased)
+
+- Security (review follow-up): node types are whitelisted before rendering —
+  a malicious "type" value never reaches the class attribute; unknown types
+  render as an inert "unsupported" card while the node data is preserved, so
+  canvases with extended node types from other tools round-trip without loss.
+- Markdown link hrefs are restricted to http(s), mailto:, # and relative
+  targets in both text cards and note cards (javascript: links become inert).
+- 31 tests (4 new injection/round-trip tests).
+
 ## [1.0.2] - 2026-11-02 (unreleased)
 
 - Security (QA pass): a javascript: url in a link card no longer renders a

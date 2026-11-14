@@ -129,6 +129,31 @@ describe('canvasClient pure helpers', () => {
     expect(huge.nodes[0].y).toBeGreaterThanOrEqual(-1e7)
   })
 
+  test('sanitizeHrefs keeps http(s)/mailto/#/relative and neuters the rest', () => {
+    const html = '<a href="javascript:alert(1)">bad</a> <a target="_blank" href="https://a.b">ok</a> <a href="#x">hash</a> <a href="mailto:a@b.c">mail</a> <a href="sub/page">rel</a> <a href="data:text/html,hi">data</a>'
+    const out = client.sanitizeHrefs(html)
+    expect(out).not.toContain('javascript:')
+    expect(out).not.toContain('data:text')
+    expect(out).toContain('href="https://a.b"')
+    expect(out).toContain('href="#x"')
+    expect(out).toContain('href="mailto:a@b.c"')
+    expect(out).toContain('href="sub/page"')
+  })
+
+  test('renderMarkdown neuters javascript: links but keeps normal ones', () => {
+    const html = client.renderMarkdown('[bad](javascript:alert(1)) [ok](https://a.b) [[My Note]]')
+    expect(html).not.toContain('javascript:')
+    expect(html).toContain('href="https://a.b"')
+    expect(html).toContain('data-note-title="My Note"')
+  })
+
+  test('sanitizeCanvas coerces non-string node types', () => {
+    const c = { nodes: [{ id: 'x', type: { evil: 1 }, x: 0, y: 0, width: 10, height: 10 }] }
+    client.sanitizeCanvas(c)
+    expect(typeof c.nodes[0].type).toBe('string')
+    expect(client.VALID_NODE_TYPES).toEqual(['text', 'file', 'link', 'group'])
+  })
+
   test('genId makes 16-char hex ids like Obsidian', () => {
     expect(client.genId()).toMatch(/^[0-9a-f]{16}$/)
   })
